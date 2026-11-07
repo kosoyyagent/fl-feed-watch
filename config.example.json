@@ -1,0 +1,7 @@
+{
+  "TG_TOKEN": "123456:ABC-your-bot-token",
+  "CHAT_ID": "-1001234567890",
+  "KEYWORDS": "бот|парсер|python|скрипт|автоматизац",
+  "FEED_URLS": "https://www.fl.ru/projects/?kind=5,https://www.fl.ru/projects/?kind=2",
+  "INTERVAL": 300
+}
