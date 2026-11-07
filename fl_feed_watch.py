@@ -84,9 +84,12 @@ def fetch_orders(url):
 def fetch_kwork(url):
     """Kwork: заказы лежат embedded-JSON в публичной странице /projects."""
     h = requests.get(url, headers=UA, timeout=40).text
-    out = []
+    out, seen_ids = [], set()
     for m in KW_RE.finditer(h):
         pid, desc, name, price = m.groups()
+        if pid in seen_ids:  # один и тот же want дублируется в JSON страницы
+            continue
+        seen_ids.add(pid)
         unesc = lambda s: htmllib.unescape(json.loads(s))
         price = f'{float(price):.0f} ₽' if price and float(price) else 'по договоренности'
         out.append({
