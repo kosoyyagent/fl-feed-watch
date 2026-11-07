@@ -23,6 +23,7 @@ UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 DEFAULT_FEEDS = [
     'https://www.fl.ru/projects/?kind=5',   # все проекты
     'https://www.fl.ru/projects/?kind=2',   # с бюджетом
+    'https://kwork.ru/projects',            # биржа Kwork (публичная страница)
 ]
 
 CARD_RE = re.compile(
@@ -31,6 +32,10 @@ CARD_RE = re.compile(
 PRICE_RE = re.compile(r"b-post__grid_price.{0,400}?<span[^>]*>(.*?)</span>", re.S)
 TXT_RE = re.compile(r'b-post__txt[^>]*>(.*?)</div>', re.S)
 TAG_RE = re.compile(r'<[^>]+>')
+JSTR = r'"(?:[^"\\]|\\.)*"'
+KW_RE = re.compile(
+    r'"id":(\d+),"status":"active".*?"description":(' + JSTR + r').*?"name":(' + JSTR +
+    r').*?"priceLimit":"?([\d.]+)"?', re.S)
 
 
 def load_cfg():
@@ -58,6 +63,8 @@ def clean(html):
 
 def fetch_orders(url):
     """Разобрать страницу ленты → [{id,title,price,desc,url}]"""
+    if 'kwork.ru' in url:
+        return fetch_kwork(url)
     h = requests.get(url, headers=UA, timeout=40).text
     out = []
     for m in CARD_RE.finditer(h):
@@ -70,6 +77,24 @@ def fetch_orders(url):
             'price': clean(pm.group(1)) if pm else '',
             'desc': clean(tm.group(1))[:220] if tm else '',
             'url': 'https://www.fl.ru' + href if href.startswith('/') else href,
+        })
+    return out
+
+
+def fetch_kwork(url):
+    """Kwork: заказы лежат embedded-JSON в публичной странице /projects."""
+    h = requests.get(url, headers=UA, timeout=40).text
+    out = []
+    for m in KW_RE.finditer(h):
+        pid, desc, name, price = m.groups()
+        unesc = lambda s: htmllib.unescape(json.loads(s))
+        price = f'{float(price):.0f} ₽' if price and float(price) else 'по договоренности'
+        out.append({
+            'id': 'kw' + pid,
+            'title': unesc(name),
+            'price': price,
+            'desc': re.sub(r'\s+', ' ', unesc(desc))[:220],
+            'url': f'https://kwork.ru/projects/{pid}',
         })
     return out
 
@@ -112,8 +137,9 @@ def run(cfg):
             if not cfg['kw'].search(o['title'] + ' ' + o['desc']):
                 continue
             price = f" · {o['price']}" if o['price'] else ''
+            src = 'Kwork' if o['id'].startswith('kw') else 'FL'
             ok = tg_send(cfg['TG_TOKEN'], cfg['CHAT_ID'],
-                         f"Новый заказ FL{price}\n\n{o['title']}\n{o['desc']}\n\n{o['url']}")
+                         f"Новый заказ {src}{price}\n\n{o['title']}\n{o['desc']}\n\n{o['url']}")
             print(('sent  ' if ok else 'FAIL  ') + o['id'] + ' ' + o['title'][:60])
             new += 1
             time.sleep(1)
